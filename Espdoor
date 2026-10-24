@@ -1,0 +1,285 @@
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local Camera = workspace.CurrentCamera
+
+local parent = game.CoreGui
+pcall(function() local h = gethui() if h then parent = h end end)
+
+if parent:FindFirstChild("JJSDoorESP_GUI") then
+    parent.JJSDoorESP_GUI:Destroy()
+end
+
+local cfg = { enabled = true, showText = true, showHighlight = true, color = Color3.fromRGB(50, 150, 255) }
+local trackedDoors = {} 
+local espFolder = Instance.new("Folder")
+espFolder.Name = "JJS_ESP_Objects"
+espFolder.Parent = parent
+
+local function updateESP(part)
+    local data = trackedDoors[part]
+    if not data then return end
+    if data.Highlight then
+        data.Highlight.Enabled = cfg.enabled and cfg.showHighlight
+        data.Highlight.FillColor = cfg.color
+    end
+    if data.Billboard then
+        data.Billboard.Enabled = cfg.enabled and cfg.showText
+        local label = data.Billboard:FindFirstChildOfClass("TextLabel")
+        if label then label.TextColor3 = cfg.color end
+    end
+end
+
+local function addESP(part)
+    if trackedDoors[part] then return end
+    local hl = Instance.new("Highlight")
+    hl.Adornee = part
+    hl.FillTransparency = 0.5
+    hl.OutlineTransparency = 0
+    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    hl.Parent = espFolder
+
+    local bb = Instance.new("BillboardGui")
+    bb.Adornee = part
+    bb.Size = UDim2.new(0, 150, 0, 50)
+    bb.StudsOffset = Vector3.new(0, 4, 0)
+    bb.AlwaysOnTop = true
+    bb.Parent = espFolder
+
+    local text = Instance.new("TextLabel")
+    text.Size = UDim2.new(1, 0, 1, 0)
+    text.BackgroundTransparency = 1
+    text.Font = Enum.Font.GothamBold
+    text.TextSize = 16
+    text.TextStrokeTransparency = 0
+    text.Parent = bb
+
+    local conn = RunService.RenderStepped:Connect(function()
+        if not part or not part.Parent or not espFolder.Parent then
+            if hl then hl:Destroy() end
+            if bb then bb:Destroy() end
+            if conn then conn:Disconnect() end
+            trackedDoors[part] = nil
+            return
+        end
+        if cfg.enabled and cfg.showText then
+            local dist = math.floor((Camera.CFrame.Position - part.Position).Magnitude)
+            text.Text = string.format("Door\n[%d studs]", dist)
+        end
+    end)
+    trackedDoors[part] = { Highlight = hl, Billboard = bb, RenderConn = conn }
+    updateESP(part)
+end
+
+task.spawn(function()
+    while espFolder.Parent do
+        if cfg.enabled then
+            for _, obj in ipairs(workspace:GetDescendants()) do
+                if obj.Name == "Door" then
+                    local mainPart = obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")) or obj
+                    if mainPart and mainPart:IsA("BasePart") then 
+                        addESP(mainPart) 
+                    end
+                end
+            end
+        end
+        task.wait(1)
+    end
+end)
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "JJSDoorESP_GUI"
+gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.DisplayOrder = 999
+gui.Parent = parent
+
+local toggleIcon = Instance.new("TextButton")
+toggleIcon.Size = UDim2.new(0, 50, 0, 50)
+toggleIcon.Position = UDim2.new(0, 20, 0, 100)
+toggleIcon.BackgroundColor3 = Color3.fromRGB(50, 150, 255)
+toggleIcon.BorderSizePixel = 0
+toggleIcon.Font = Enum.Font.GothamBold
+toggleIcon.Text = "JJS"
+toggleIcon.TextColor3 = Color3.new(1, 1, 1)
+toggleIcon.TextSize = 14
+toggleIcon.Parent = gui
+Instance.new("UICorner", toggleIcon).CornerRadius = UDim.new(1, 0)
+
+local main = Instance.new("Frame")
+main.Size = UDim2.new(0, 220, 0, 310)
+main.Position = UDim2.new(0, 80, 0, 100)
+main.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
+main.BorderSizePixel = 0
+main.Active = true
+main.Parent = gui
+Instance.new("UICorner", main).CornerRadius = UDim.new(0, 8)
+
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 32)
+titleBar.BackgroundColor3 = Color3.fromRGB(28, 28, 34)
+titleBar.BorderSizePixel = 0
+titleBar.Parent = main
+Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 8)
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -40, 1, 0)
+title.Position = UDim2.new(0, 10, 0, 0)
+title.BackgroundTransparency = 1
+title.Font = Enum.Font.GothamBold
+title.Text = "Door ESP"
+title.TextColor3 = Color3.fromRGB(230, 230, 240)
+title.TextSize = 13
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = titleBar
+
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 24, 0, 24)
+closeBtn.Position = UDim2.new(1, -30, 0.5, -12)
+closeBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+closeBtn.BorderSizePixel = 0
+closeBtn.Text = "X"
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextColor3 = Color3.new(1, 1, 1)
+closeBtn.TextSize = 12
+closeBtn.Parent = titleBar
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 4)
+
+local dragTarget = nil
+local dragStart, dragStartPos = nil, nil
+local function startDrag(frame, target)
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragTarget = target
+            dragStart = input.Position
+            dragStartPos = target.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragTarget = nil end
+            end)
+        end
+    end)
+end
+
+startDrag(titleBar, main)
+startDrag(toggleIcon, toggleIcon)
+
+UIS.InputChanged:Connect(function(input)
+    if dragTarget and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local d = input.Position - dragStart
+        dragTarget.Position = UDim2.new(dragStartPos.X.Scale, dragStartPos.X.Offset + d.X, dragStartPos.Y.Scale, dragStartPos.Y.Offset + d.Y)
+    end
+end)
+
+local function makeToggle(y, label, get, set)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, -16, 0, 34)
+    row.Position = UDim2.new(0, 8, 0, y)
+    row.BackgroundColor3 = Color3.fromRGB(26, 26, 32)
+    row.BorderSizePixel = 0
+    row.Parent = main
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -60, 1, 0)
+    lbl.Position = UDim2.new(0, 8, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Font = Enum.Font.Gotham
+    lbl.Text = label
+    lbl.TextColor3 = Color3.fromRGB(205, 205, 220)
+    lbl.TextSize = 12
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = row
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 50, 0, 22)
+    btn.Position = UDim2.new(1, -58, 0.5, -11)
+    btn.BackgroundColor3 = Color3.fromRGB(55, 55, 65)
+    btn.BorderSizePixel = 0
+    btn.Font = Enum.Font.GothamBold
+    btn.Text = "OFF"
+    btn.TextColor3 = Color3.fromRGB(175, 175, 190)
+    btn.TextSize = 11
+    btn.Parent = row
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+
+    local function refresh()
+        local on = get()
+        btn.Text = on and "ON" or "OFF"
+        btn.BackgroundColor3 = on and Color3.fromRGB(70, 180, 110) or Color3.fromRGB(55, 55, 65)
+        btn.TextColor3 = on and Color3.new(1, 1, 1) or Color3.fromRGB(175, 175, 190)
+    end
+    btn.MouseButton1Click:Connect(function() set(not get()) refresh() end)
+    refresh()
+end
+
+makeToggle(38, "Enabled", function() return cfg.enabled end, function(v) cfg.enabled = v end)
+makeToggle(78, "Text", function() return cfg.showText end, function(v) cfg.showText = v for p in pairs(trackedDoors) do updateESP(p) end end)
+makeToggle(118, "Highlight", function() return cfg.showHighlight end, function(v) cfg.showHighlight = v for p in pairs(trackedDoors) do updateESP(p) end end)
+
+local colorRow = Instance.new("Frame")
+colorRow.Size = UDim2.new(1, -16, 0, 28)
+colorRow.Position = UDim2.new(0, 8, 0, 162)
+colorRow.BackgroundTransparency = 1
+colorRow.Parent = main
+
+local colorLayout = Instance.new("UIListLayout")
+colorLayout.FillDirection = Enum.FillDirection.Horizontal
+colorLayout.Padding = UDim.new(0, 4)
+colorLayout.Parent = colorRow
+
+local colors = {
+    {Color = Color3.fromRGB(50, 150, 255)},
+    {Color = Color3.fromRGB(255, 50, 50)},
+    {Color = Color3.fromRGB(50, 255, 50)},
+    {Color = Color3.fromRGB(200, 0, 255)},
+    {Color = Color3.fromRGB(255, 255, 255)},
+    {Color = Color3.fromRGB(255, 215, 0)}
+}
+
+for _, c in ipairs(colors) do
+    local cBtn = Instance.new("TextButton")
+    cBtn.Size = UDim2.new(0, 28, 0, 28)
+    cBtn.BackgroundColor3 = c.Color
+    cBtn.BorderSizePixel = 0
+    cBtn.Text = ""
+    cBtn.Parent = colorRow
+    Instance.new("UICorner", cBtn).CornerRadius = UDim.new(0, 4)
+    cBtn.MouseButton1Click:Connect(function()
+        cfg.color = c.Color
+        for p in pairs(trackedDoors) do updateESP(p) end
+    end)
+end
+
+local unloadBtn = Instance.new("TextButton")
+unloadBtn.Size = UDim2.new(1, -16, 0, 34)
+unloadBtn.Position = UDim2.new(0, 8, 0, 260)
+unloadBtn.BackgroundColor3 = Color3.fromRGB(120, 40, 40)
+unloadBtn.BorderSizePixel = 0
+unloadBtn.Font = Enum.Font.GothamBold
+unloadBtn.Text = "Unload Script"
+unloadBtn.TextColor3 = Color3.fromRGB(255, 200, 200)
+unloadBtn.TextSize = 12
+unloadBtn.Parent = main
+Instance.new("UICorner", unloadBtn).CornerRadius = UDim.new(0, 4)
+
+toggleIcon.MouseButton1Click:Connect(function()
+    if dragTarget then return end 
+    main.Visible = not main.Visible
+    if main.Visible then
+        main.Position = UDim2.new(toggleIcon.Position.X.Scale, toggleIcon.Position.X.Offset + 60, toggleIcon.Position.Y.Scale, toggleIcon.Position.Y.Offset)
+    end
+end)
+
+closeBtn.MouseButton1Click:Connect(function()
+    main.Visible = false
+end)
+
+unloadBtn.MouseButton1Click:Connect(function()
+    for part, data in pairs(trackedDoors) do
+        if data.Highlight then data.Highlight:Destroy() end
+        if data.Billboard then data.Billboard:Destroy() end
+        if data.RenderConn then data.RenderConn:Disconnect() end
+    end
+    gui:Destroy()
+    espFolder:Destroy()
+end)
